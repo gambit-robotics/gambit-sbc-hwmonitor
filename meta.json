@@ -1,63 +1,63 @@
 {
-  "module_id": "rinzlerlabs:sbc-hwmonitor",
+  "module_id": "gambit-robotics:sbc-hwmonitor",
   "visibility": "public",
-  "url": "https://github.com/rinzlerlabs/viam-sbc-hwmonitor",
-  "description": "A collection of sensors and utilities for single board computers (SBC) like the Raspberry Pi or NVIDIA Jetson Nano. The values in Readings should not be considered stable at this time. This module is under active development.",
+  "url": "https://github.com/gambit-robotics/gambit-sbc-hwmonitor",
+  "description": "CM5-compatible SBC hardware monitor. Fork of rinzlerlabs:sbc-hwmonitor with CM5 support.",
   "models": [
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:clocks"
+      "model": "gambit-robotics:hwmonitor:clocks"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:cpu_manager"
+      "model": "gambit-robotics:hwmonitor:cpu_manager"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:voltages"
+      "model": "gambit-robotics:hwmonitor:voltages"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:temperatures"
+      "model": "gambit-robotics:hwmonitor:temperatures"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:throttling"
+      "model": "gambit-robotics:hwmonitor:throttling"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:pwm_fan"
+      "model": "gambit-robotics:hwmonitor:pwm_fan"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:cpu_monitor"
+      "model": "gambit-robotics:hwmonitor:cpu_monitor"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:gpu_monitor"
+      "model": "gambit-robotics:hwmonitor:gpu_monitor"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:memory_monitor"
+      "model": "gambit-robotics:hwmonitor:memory_monitor"
     },
     {
       "api": "rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:process_monitor"
+      "model": "gambit-robotics:hwmonitor:process_monitor"
     },
     {
-      "api":"rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:disk_monitor"
+      "api": "rdk:component:sensor",
+      "model": "gambit-robotics:hwmonitor:disk_monitor"
     },
     {
-      "api":"rdk:component:sensor",
-      "model": "rinzlerlabs:hwmonitor:wifi_monitor"
+      "api": "rdk:component:sensor",
+      "model": "gambit-robotics:hwmonitor:wifi_monitor"
     }
   ],
   "build": {
     "build": "make package",
-    "path": "package/rinzlerlabs-sbc-hwmonitor.tar.gz",
+    "path": "package/gambit-robotics-sbc-hwmonitor.tar.gz",
     "arch": ["linux/arm64", "linux/amd64"]
   },
-  "entrypoint": "bin/rinzlerlabs-sbc-hwmonitor",
+  "entrypoint": "bin/gambit-robotics-sbc-hwmonitor",
   "first_run": ""
 }

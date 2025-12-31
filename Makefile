@@ -1,6 +1,6 @@
 # === Configurable Variables ===
 BIN_PATH := bin
-BIN_NAME := rinzlerlabs-sbc-hwmonitor
+BIN_NAME := gambit-robotics-sbc-hwmonitor
 ENTRY_POINT := module.go
 VERSION_PATH := utils/version.go
 PLATFORM := $(shell go env GOOS)/$(shell go env GOARCH)
