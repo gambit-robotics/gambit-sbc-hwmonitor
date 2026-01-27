@@ -22,14 +22,14 @@ var (
 )
 
 type CPUCoreStats struct {
-	User    uint64
-	Nice    uint64
-	System  uint64
-	Idle    uint64
-	IOWait  uint64
-	IRQ     uint64
-	SoftIRQ uint64
-	Steal   uint64
+	User    float64
+	Nice    float64
+	System  float64
+	Idle    float64
+	IOWait  float64
+	IRQ     float64
+	SoftIRQ float64
+	Steal   float64
 }
 
 type Process struct {
@@ -78,27 +78,27 @@ func ReadCPUStats() (map[string]CPUCoreStats, error) {
 	stats := make(map[string]CPUCoreStats)
 	totalStats := CPUCoreStats{}
 	for _, stat := range rawStats {
-		// Add per-core stats
+		// Add per-core stats (keep float64 precision from gopsutil)
 		stats[stat.CPU] = CPUCoreStats{
-			User:    uint64(stat.User),
-			Nice:    uint64(stat.Nice),
-			System:  uint64(stat.System),
-			Idle:    uint64(stat.Idle),
-			IOWait:  uint64(stat.Iowait),
-			IRQ:     uint64(stat.Irq),
-			SoftIRQ: uint64(stat.Softirq),
-			Steal:   uint64(stat.Steal),
+			User:    stat.User,
+			Nice:    stat.Nice,
+			System:  stat.System,
+			Idle:    stat.Idle,
+			IOWait:  stat.Iowait,
+			IRQ:     stat.Irq,
+			SoftIRQ: stat.Softirq,
+			Steal:   stat.Steal,
 		}
 
 		// Add total stats
-		totalStats.User += uint64(stat.User)
-		totalStats.Nice += uint64(stat.Nice)
-		totalStats.System += uint64(stat.System)
-		totalStats.Idle += uint64(stat.Idle)
-		totalStats.IOWait += uint64(stat.Iowait)
-		totalStats.IRQ += uint64(stat.Irq)
-		totalStats.SoftIRQ += uint64(stat.Softirq)
-		totalStats.Steal += uint64(stat.Steal)
+		totalStats.User += stat.User
+		totalStats.Nice += stat.Nice
+		totalStats.System += stat.System
+		totalStats.Idle += stat.Idle
+		totalStats.IOWait += stat.Iowait
+		totalStats.IRQ += stat.Irq
+		totalStats.SoftIRQ += stat.Softirq
+		totalStats.Steal += stat.Steal
 	}
 
 	stats["cpu"] = totalStats
@@ -115,7 +115,13 @@ type ProcessMonitor struct {
 	mu                sync.Mutex
 }
 
-// CalculateUsage calculates CPU usage percentages
+// CalculateUsage calculates CPU usage percentages.
+// Returns -1 if counter regression is detected (caller should skip this reading).
+// Counter regression can occur due to:
+// - Kernel race conditions (no mutex on CPU metric counters)
+// - CPU hotplug events (common on ARM SoCs with power management)
+// - System suspension
+// See: https://github.com/prometheus/node_exporter/pull/2067
 func CalculateUsage(prev, curr CPUCoreStats) float64 {
 	prevIdle := prev.Idle + prev.IOWait
 	currIdle := curr.Idle + curr.IOWait
@@ -126,14 +132,29 @@ func CalculateUsage(prev, curr CPUCoreStats) float64 {
 	prevTotal := prevIdle + prevNonIdle
 	currTotal := currIdle + currNonIdle
 
+	// Guard against counter regression (values going backwards)
+	// Return -1 to signal invalid reading - caller should keep previous value
+	if currTotal <= prevTotal {
+		return -1
+	}
+	if currIdle < prevIdle {
+		return -1
+	}
+
 	totalDelta := currTotal - prevTotal
 	idleDelta := currIdle - prevIdle
 
-	if totalDelta == 0 {
+	usage := ((totalDelta - idleDelta) / totalDelta) * 100
+
+	// Clamp to valid range
+	if usage < 0 {
 		return 0.0
 	}
+	if usage > 100 {
+		return 100.0
+	}
 
-	return utils.RoundValue((float64(totalDelta-idleDelta)/float64(totalDelta))*100, 2)
+	return utils.RoundValue(usage, 2)
 }
 
 func NewProcessMonitor(logger logging.Logger, name string, disablePidCaching bool) *ProcessMonitor {

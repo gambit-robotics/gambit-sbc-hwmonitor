@@ -1,7 +1,7 @@
 package utils
 
 const (
-	Version    = "0.0.15"
+	Version    = "0.0.18"
 	LoggerName = "sbc-sensors"
 	Namespace  = "gambit-robotics"
 )

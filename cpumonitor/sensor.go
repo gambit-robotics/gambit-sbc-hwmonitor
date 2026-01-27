@@ -106,6 +106,7 @@ func (c *Config) Close(ctx context.Context) error {
 func (c *Config) startUpdating(ctx context.Context) {
 	var err error
 	var lastStats map[string]sensors.CPUCoreStats
+	var lastReadings map[string]interface{}
 	for {
 		if lastStats == nil {
 			lastStats, err = sensors.ReadCPUStats()
@@ -113,6 +114,7 @@ func (c *Config) startUpdating(ctx context.Context) {
 				c.logger.Warnf("Failed to read CPU stats, skipping iteration: %v", err)
 				continue
 			}
+			lastReadings = make(map[string]interface{})
 		}
 		select {
 		case <-ctx.Done():
@@ -131,11 +133,22 @@ func (c *Config) startUpdating(ctx context.Context) {
 					continue
 				}
 				usage := sensors.CalculateUsage(prev, curr)
+				if usage < 0 {
+					// Counter regression detected - keep previous reading and don't update baseline
+					if prevReading, ok := lastReadings[core]; ok {
+						ret[core] = prevReading
+					} else {
+						ret[core] = 0.0
+					}
+					continue
+				}
 				ret[core] = usage
+				// Only update baseline for this core if reading was valid
+				lastStats[core] = curr
 			}
-			lastStats = currStats
 			c.readingsLock.Lock()
 			c.reading = ret
+			lastReadings = ret
 			c.readingsLock.Unlock()
 		}
 	}
