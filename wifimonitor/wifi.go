@@ -13,8 +13,14 @@ type WifiMonitor interface {
 }
 
 type networkStatus struct {
-	NetworkName    string
-	SignalStrength int
-	TxSpeedMbps    float64
-	RxSpeedMbps    float64
+	NetworkName       string
+	SignalStrength    int
+	TxSpeedMbps       float64
+	RxSpeedMbps       float64
+	FrequencyMHz      int
+	TxRetries         int
+	TxFailed          int
+	BeaconSignalAvg   int
+	ConnectedTimeSec  int
+	InactiveTimeMs    int
 }

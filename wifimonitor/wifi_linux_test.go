@@ -43,13 +43,15 @@ func TestLinuxIwWifiMonitor(t *testing.T) {
 		name           string
 		adapter        string
 		signalStrength int
-		linkSpeed      float64
+		rxSpeed        float64
+		txSpeed        float64
+		frequency      int
 		expectedError  error
 		file           string
 	}{
-		{"AdapterExistsConnected", "wlan0", -65, 52.0, nil, "iw_wlan0_connected.txt"},
-		{"AdapterExistsNotConnected", "wlan0", -1, -1, ErrNotConnected, "iw_wlan0_not_connected.txt"},
-		{"AdapterDoesNotExist", "wlan1", -1, -1, ErrAdapterNotFound, "iw_wlan1_does_not_exist.txt"},
+		{"AdapterExistsConnected", "wlan0", -65, 52.0, 72.2, 2412, nil, "iw_wlan0_connected.txt"},
+		{"AdapterExistsNotConnected", "wlan0", -1, -1, -1, 0, ErrNotConnected, "iw_wlan0_not_connected.txt"},
+		{"AdapterDoesNotExist", "wlan1", -1, -1, -1, 0, ErrAdapterNotFound, "iw_wlan1_does_not_exist.txt"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -63,10 +65,27 @@ func TestLinuxIwWifiMonitor(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tt.signalStrength, status.SignalStrength)
-				assert.Equal(t, tt.linkSpeed, status.TxSpeedMbps)
+				assert.Equal(t, tt.rxSpeed, status.RxSpeedMbps)
+				assert.Equal(t, tt.txSpeed, status.TxSpeedMbps)
+				assert.Equal(t, tt.frequency, status.FrequencyMHz)
 			}
 		})
 	}
+}
+
+func TestLinuxIwStationDump(t *testing.T) {
+	output, err := os.ReadFile("testdata/iw_station_dump.txt")
+	require.NoError(t, err)
+
+	w := &iwWifiMonitor{adapter: "wlan0"}
+	status := &networkStatus{}
+	w.parseStationDump(string(output), status)
+
+	assert.Equal(t, 123, status.TxRetries)
+	assert.Equal(t, 5, status.TxFailed)
+	assert.Equal(t, -62, status.BeaconSignalAvg)
+	assert.Equal(t, 3600, status.ConnectedTimeSec)
+	assert.Equal(t, 100, status.InactiveTimeMs)
 }
 
 func TestLinuxNmcliWifiMonitor(t *testing.T) {

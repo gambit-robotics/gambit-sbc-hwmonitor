@@ -1,0 +1,27 @@
+Station a1:b2:c3:d4:e5:f6 (on wlan0)
+	inactive time:	100 ms
+	rx bytes:	1234567
+	rx packets:	8901
+	tx bytes:	2345678
+	tx packets:	9012
+	tx retries:	123
+	tx failed:	5
+	beacon loss:	0
+	beacon rx:	12345
+	rx drop misc:	0
+	signal:  	-65 dBm
+	signal avg:	-64 dBm
+	beacon signal avg:	-62 dBm
+	tx bitrate:	72.2 MBit/s MCS 7 short GI
+	rx bitrate:	52.0 MBit/s MCS 5 short GI
+	authorized:	yes
+	authenticated:	yes
+	associated:	yes
+	preamble:	short
+	WMM/WME:	yes
+	MFP:		no
+	TDLS peer:	no
+	DTIM period:	2
+	beacon interval:100
+	short slot time:yes
+	connected time:	3600 seconds

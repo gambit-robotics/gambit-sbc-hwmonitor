@@ -93,7 +93,14 @@ func (c *Config) Readings(ctx context.Context, extra map[string]interface{}) (ma
 		} else {
 			ret["network"] = status.NetworkName
 			ret["signal_strength"] = status.SignalStrength
-			ret["link_speed_mbps"] = status.TxSpeedMbps
+			ret["tx_speed_mbps"] = status.TxSpeedMbps
+			ret["rx_speed_mbps"] = status.RxSpeedMbps
+			ret["frequency_mhz"] = status.FrequencyMHz
+			ret["tx_retries"] = status.TxRetries
+			ret["tx_failed"] = status.TxFailed
+			ret["beacon_signal_avg"] = status.BeaconSignalAvg
+			ret["connected_time_sec"] = status.ConnectedTimeSec
+			ret["inactive_time_ms"] = status.InactiveTimeMs
 		}
 	} else {
 		ret["network"] = "unknown"

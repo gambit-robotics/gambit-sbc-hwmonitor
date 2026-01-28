@@ -95,7 +95,15 @@ func (w *iwWifiMonitor) GetNetworkStatus() (*networkStatus, error) {
 		return nil, err
 	}
 
-	return w.parseNetworkStatus(string(out))
+	status, err := w.parseNetworkStatus(string(out))
+	if err != nil {
+		return nil, err
+	}
+
+	// Get additional stats from station dump (retries, failures, etc.)
+	w.enrichWithStationDump(status)
+
+	return status, nil
 }
 
 func (w *iwWifiMonitor) parseNetworkStatus(out string) (*networkStatus, error) {
@@ -113,6 +121,16 @@ func (w *iwWifiMonitor) parseNetworkStatus(out string) (*networkStatus, error) {
 		if strings.HasPrefix(line, "SSID:") {
 			col := strings.Split(line, ":")
 			status.NetworkName = strings.TrimSpace(col[1])
+		} else if strings.HasPrefix(line, "freq:") {
+			col := strings.Split(line, ":")
+			freqStr := strings.TrimSpace(col[1])
+			// Handle both "2412" and "5200.0" formats
+			freq, err := strconv.ParseFloat(freqStr, 64)
+			if err != nil {
+				e = errors.Join(e, err)
+			} else {
+				status.FrequencyMHz = int(freq)
+			}
 		} else if strings.HasPrefix(line, "signal:") {
 			col := strings.Split(line, ":")
 			signalStrength, err := strconv.Atoi(strings.TrimSuffix(strings.TrimSpace(col[1]), " dBm"))
@@ -128,11 +146,66 @@ func (w *iwWifiMonitor) parseNetworkStatus(out string) (*networkStatus, error) {
 				linkSpeed = -1
 				e = errors.Join(e, err)
 			}
+			status.RxSpeedMbps = linkSpeed
+		} else if strings.HasPrefix(line, "tx bitrate:") {
+			col := strings.Split(line, ":")
+			linkSpeed, err := strconv.ParseFloat(strings.Split(col[1], " ")[1], 64)
+			if err != nil {
+				linkSpeed = -1
+				e = errors.Join(e, err)
+			}
 			status.TxSpeedMbps = linkSpeed
 		}
 	}
 
 	return status, e
+}
+
+// enrichWithStationDump adds retry/failure stats from iw station dump
+func (w *iwWifiMonitor) enrichWithStationDump(status *networkStatus) {
+	cmd := exec.Command("iw", "dev", w.adapter, "station", "dump")
+	out, err := cmd.Output()
+	if err != nil {
+		return // silently fail - these are optional stats
+	}
+	w.parseStationDump(string(out), status)
+}
+
+// parseStationDump parses the output of iw station dump
+func (w *iwWifiMonitor) parseStationDump(out string, status *networkStatus) {
+	lines := strings.Split(out, "\n")
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "tx retries:") {
+			col := strings.Split(line, ":")
+			if val, err := strconv.Atoi(strings.TrimSpace(col[1])); err == nil {
+				status.TxRetries = val
+			}
+		} else if strings.HasPrefix(line, "tx failed:") {
+			col := strings.Split(line, ":")
+			if val, err := strconv.Atoi(strings.TrimSpace(col[1])); err == nil {
+				status.TxFailed = val
+			}
+		} else if strings.HasPrefix(line, "beacon signal avg:") {
+			col := strings.Split(line, ":")
+			valStr := strings.TrimSuffix(strings.TrimSpace(col[1]), " dBm")
+			if val, err := strconv.Atoi(valStr); err == nil {
+				status.BeaconSignalAvg = val
+			}
+		} else if strings.HasPrefix(line, "connected time:") {
+			col := strings.Split(line, ":")
+			valStr := strings.TrimSuffix(strings.TrimSpace(col[1]), " seconds")
+			if val, err := strconv.Atoi(valStr); err == nil {
+				status.ConnectedTimeSec = val
+			}
+		} else if strings.HasPrefix(line, "inactive time:") {
+			col := strings.Split(line, ":")
+			valStr := strings.TrimSuffix(strings.TrimSpace(col[1]), " ms")
+			if val, err := strconv.Atoi(valStr); err == nil {
+				status.InactiveTimeMs = val
+			}
+		}
+	}
 }
 
 type procWifiMonitor struct {
