@@ -84,8 +84,54 @@ func TestLinuxIwStationDump(t *testing.T) {
 	assert.Equal(t, 123, status.TxRetries)
 	assert.Equal(t, 5, status.TxFailed)
 	assert.Equal(t, -62, status.BeaconSignalAvg)
+	assert.Equal(t, -64, status.SignalAvg)
+	assert.Equal(t, -63, status.AckSignalAvg)
 	assert.Equal(t, 3600, status.ConnectedTimeSec)
 	assert.Equal(t, 100, status.InactiveTimeMs)
+}
+
+func TestLinuxIwStationDumpMultiAntenna(t *testing.T) {
+	// Test multi-antenna format: "signal avg: -49 [-57, -56, -54] dBm"
+	output := `Station a1:b2:c3:d4:e5:f6 (on wlan0)
+	signal avg:	-49 [-57, -56, -54] dBm
+	beacon signal avg:	-50 dBm
+	ack signal avg:	-48 dBm
+`
+	w := &iwWifiMonitor{adapter: "wlan0"}
+	status := &networkStatus{}
+	w.parseStationDump(output, status)
+
+	assert.Equal(t, -49, status.SignalAvg)
+	assert.Equal(t, -50, status.BeaconSignalAvg)
+	assert.Equal(t, -48, status.AckSignalAvg)
+}
+
+func TestLinuxIwSurveyDump(t *testing.T) {
+	output := `Survey data from wlan0
+	frequency:			2412 MHz
+	noise:				-92 dBm
+	channel active time:		1234 ms
+	channel busy time:		567 ms
+Survey data from wlan0
+	frequency:			2437 MHz [in use]
+	noise:				-95 dBm
+	channel active time:		5678 ms
+	channel busy time:		890 ms
+Survey data from wlan0
+	frequency:			2462 MHz
+	noise:				-90 dBm
+`
+	w := &iwWifiMonitor{adapter: "wlan0"}
+
+	// Test with [in use] marker
+	status := &networkStatus{}
+	w.parseSurveyDump(output, status)
+	assert.Equal(t, -95, status.Noise)
+
+	// Test matching by frequency
+	status2 := &networkStatus{FrequencyMHz: 2412}
+	w.parseSurveyDump(output, status2)
+	assert.Equal(t, -92, status2.Noise)
 }
 
 func TestLinuxNmcliWifiMonitor(t *testing.T) {

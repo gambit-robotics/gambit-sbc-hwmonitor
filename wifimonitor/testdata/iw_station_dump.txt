@@ -12,6 +12,7 @@ Station a1:b2:c3:d4:e5:f6 (on wlan0)
 	signal:  	-65 dBm
 	signal avg:	-64 dBm
 	beacon signal avg:	-62 dBm
+	ack signal avg:	-63 dBm
 	tx bitrate:	72.2 MBit/s MCS 7 short GI
 	rx bitrate:	52.0 MBit/s MCS 5 short GI
 	authorized:	yes

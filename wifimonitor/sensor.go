@@ -99,6 +99,9 @@ func (c *Config) Readings(ctx context.Context, extra map[string]interface{}) (ma
 			ret["tx_retries"] = status.TxRetries
 			ret["tx_failed"] = status.TxFailed
 			ret["beacon_signal_avg"] = status.BeaconSignalAvg
+			ret["signal_avg"] = status.SignalAvg
+			ret["ack_signal_avg"] = status.AckSignalAvg
+			ret["noise"] = status.Noise
 			ret["connected_time_sec"] = status.ConnectedTimeSec
 			ret["inactive_time_ms"] = status.InactiveTimeMs
 		}

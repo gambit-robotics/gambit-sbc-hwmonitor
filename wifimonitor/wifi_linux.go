@@ -103,6 +103,9 @@ func (w *iwWifiMonitor) GetNetworkStatus() (*networkStatus, error) {
 	// Get additional stats from station dump (retries, failures, etc.)
 	w.enrichWithStationDump(status)
 
+	// Get noise floor from survey dump
+	w.enrichWithSurveyDump(status)
+
 	return status, nil
 }
 
@@ -192,6 +195,20 @@ func (w *iwWifiMonitor) parseStationDump(out string, status *networkStatus) {
 			if val, err := strconv.Atoi(valStr); err == nil {
 				status.BeaconSignalAvg = val
 			}
+		} else if strings.HasPrefix(line, "signal avg:") {
+			col := strings.Split(line, ":")
+			valStr := strings.TrimSpace(col[1])
+			// Handle format like "-49 [-57, -56, -54] dBm" by taking first number
+			valStr = strings.Split(valStr, " ")[0]
+			if val, err := strconv.Atoi(valStr); err == nil {
+				status.SignalAvg = val
+			}
+		} else if strings.HasPrefix(line, "ack signal avg:") {
+			col := strings.Split(line, ":")
+			valStr := strings.TrimSuffix(strings.TrimSpace(col[1]), " dBm")
+			if val, err := strconv.Atoi(valStr); err == nil {
+				status.AckSignalAvg = val
+			}
 		} else if strings.HasPrefix(line, "connected time:") {
 			col := strings.Split(line, ":")
 			valStr := strings.TrimSuffix(strings.TrimSpace(col[1]), " seconds")
@@ -204,6 +221,55 @@ func (w *iwWifiMonitor) parseStationDump(out string, status *networkStatus) {
 			if val, err := strconv.Atoi(valStr); err == nil {
 				status.InactiveTimeMs = val
 			}
+		}
+	}
+}
+
+// enrichWithSurveyDump adds noise floor from iw survey dump
+func (w *iwWifiMonitor) enrichWithSurveyDump(status *networkStatus) {
+	cmd := exec.Command("iw", "dev", w.adapter, "survey", "dump")
+	out, err := cmd.Output()
+	if err != nil {
+		return // silently fail - this is optional
+	}
+	w.parseSurveyDump(string(out), status)
+}
+
+// parseSurveyDump parses the output of iw survey dump to get noise floor
+// It finds the survey block matching the current frequency and extracts noise
+func (w *iwWifiMonitor) parseSurveyDump(out string, status *networkStatus) {
+	lines := strings.Split(out, "\n")
+	inCurrentFreqBlock := false
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+
+		// Check for frequency line to identify the right block
+		if strings.HasPrefix(line, "frequency:") {
+			col := strings.Split(line, ":")
+			freqStr := strings.TrimSpace(col[1])
+			freqStr = strings.TrimSuffix(freqStr, " MHz")
+			// Check for "[in use]" marker which indicates current channel
+			if strings.Contains(freqStr, "[in use]") {
+				inCurrentFreqBlock = true
+				freqStr = strings.TrimSpace(strings.Split(freqStr, "[")[0])
+			} else if status.FrequencyMHz > 0 {
+				// Match by frequency if we know it
+				if freq, err := strconv.Atoi(freqStr); err == nil && freq == status.FrequencyMHz {
+					inCurrentFreqBlock = true
+				} else {
+					inCurrentFreqBlock = false
+				}
+			} else {
+				inCurrentFreqBlock = false
+			}
+		} else if inCurrentFreqBlock && strings.HasPrefix(line, "noise:") {
+			col := strings.Split(line, ":")
+			valStr := strings.TrimSuffix(strings.TrimSpace(col[1]), " dBm")
+			if val, err := strconv.Atoi(valStr); err == nil {
+				status.Noise = val
+			}
+			return // Found what we need
 		}
 	}
 }

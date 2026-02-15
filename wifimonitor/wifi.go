@@ -21,6 +21,9 @@ type networkStatus struct {
 	TxRetries         int
 	TxFailed          int
 	BeaconSignalAvg   int
+	SignalAvg         int
+	AckSignalAvg      int
+	Noise             int
 	ConnectedTimeSec  int
 	InactiveTimeMs    int
 }
