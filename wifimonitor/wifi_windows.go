@@ -16,6 +16,10 @@ func (c *Config) newWifiMonitor(adapter string) WifiMonitor {
 	return &wifiMonitor{adapter: adapter, logger: c.logger}
 }
 
+func newNetworkManager(logger logging.Logger) WifiNetworkManager {
+	return nil
+}
+
 type wifiMonitor struct {
 	adapter string
 	logger  logging.Logger

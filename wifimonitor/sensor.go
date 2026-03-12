@@ -3,7 +3,9 @@ package wifimonitor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
+	"time"
 
 	"go.viam.com/rdk/components/sensor"
 	"go.viam.com/rdk/logging"
@@ -20,13 +22,18 @@ var (
 	Version     = utils.Version
 )
 
+const savedNetworksCacheTTL = 30 * time.Second
+
 type Config struct {
 	resource.Named
-	mu          sync.Mutex
-	logger      logging.Logger
-	cancelCtx   context.Context
-	cancelFunc  func()
-	wifiMonitor WifiMonitor
+	mu                    sync.Mutex
+	logger                logging.Logger
+	cancelCtx             context.Context
+	cancelFunc            func()
+	wifiMonitor           WifiMonitor
+	networkManager        WifiNetworkManager
+	savedNetworksCache    []string
+	savedNetworksCacheExp time.Time
 }
 
 func init() {
@@ -73,6 +80,7 @@ func (c *Config) Reconfigure(ctx context.Context, _ resource.Dependencies, conf 
 		return errors.New("no suitable wifi monitor found")
 	}
 	c.wifiMonitor = mon
+	c.networkManager = newNetworkManager(c.logger)
 
 	return nil
 }
@@ -109,7 +117,92 @@ func (c *Config) Readings(ctx context.Context, extra map[string]interface{}) (ma
 		ret["network"] = "unknown"
 	}
 
+	if c.networkManager != nil {
+		networks, err := c.getSavedNetworks()
+		if err != nil {
+			c.logger.Warnf("Failed to list saved networks: %v", err)
+		} else {
+			ret["saved_networks"] = stringsToInterfaces(networks)
+		}
+	}
+
 	return ret, nil
+}
+
+// getSavedNetworks returns cached saved networks, refreshing if expired.
+// Must be called with c.mu held.
+func (c *Config) getSavedNetworks() ([]string, error) {
+	if time.Now().Before(c.savedNetworksCacheExp) {
+		return c.savedNetworksCache, nil
+	}
+	networks, err := c.networkManager.ListSavedNetworks()
+	if err != nil {
+		return nil, err
+	}
+	c.savedNetworksCache = networks
+	c.savedNetworksCacheExp = time.Now().Add(savedNetworksCacheTTL)
+	return networks, nil
+}
+
+func (c *Config) invalidateSavedNetworksCache() {
+	c.savedNetworksCacheExp = time.Time{}
+}
+
+func (c *Config) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	command, ok := cmd["command"].(string)
+	if !ok {
+		return nil, errors.New("missing or invalid 'command' field")
+	}
+
+	switch command {
+	case "list_saved_networks":
+		return c.handleListNetworks()
+	case "forget_network":
+		return c.handleForgetNetwork(cmd)
+	default:
+		return nil, fmt.Errorf("unknown command: %s", command)
+	}
+}
+
+func (c *Config) handleListNetworks() (map[string]interface{}, error) {
+	if c.networkManager == nil {
+		return nil, ErrNmcliNotAvailable
+	}
+	networks, err := c.getSavedNetworks()
+	if err != nil {
+		return nil, err
+	}
+	return map[string]interface{}{"networks": stringsToInterfaces(networks)}, nil
+}
+
+func (c *Config) handleForgetNetwork(cmd map[string]interface{}) (map[string]interface{}, error) {
+	if c.networkManager == nil {
+		return nil, ErrNmcliNotAvailable
+	}
+	name, ok := cmd["name"].(string)
+	if !ok {
+		return nil, errors.New("missing or invalid 'name' parameter for forget_network command")
+	}
+	if name == "" {
+		return nil, errors.New("network name cannot be empty")
+	}
+
+	if err := c.networkManager.ForgetNetwork(name); err != nil {
+		return nil, err
+	}
+	c.invalidateSavedNetworksCache()
+
+	result := map[string]interface{}{"status": "ok", "name": name}
+	if c.wifiMonitor != nil {
+		status, err := c.wifiMonitor.GetNetworkStatus()
+		if err == nil && status.NetworkName == name {
+			result["warning"] = "forgot the active network; device may lose connectivity. If viam-agent provisioning is enabled, it will start the hotspot flow."
+		}
+	}
+	return result, nil
 }
 
 func (c *Config) Close(ctx context.Context) error {
@@ -120,4 +213,12 @@ func (c *Config) Close(ctx context.Context) error {
 
 func (c *Config) Ready(ctx context.Context, extra map[string]interface{}) (bool, error) {
 	return false, nil
+}
+
+func stringsToInterfaces(s []string) []interface{} {
+	r := make([]interface{}, len(s))
+	for i, v := range s {
+		r[i] = v
+	}
+	return r
 }

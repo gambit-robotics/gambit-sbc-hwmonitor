@@ -3,13 +3,19 @@ package wifimonitor
 import "errors"
 
 var (
-	ErrNotConnected    = errors.New("not connected to a network")
-	ErrAdapterNotFound = errors.New("adapter not found")
-	ErrNoAdaptersFound = errors.New("no adapters found")
+	ErrNotConnected      = errors.New("not connected to a network")
+	ErrAdapterNotFound   = errors.New("adapter not found")
+	ErrNoAdaptersFound   = errors.New("no adapters found")
+	ErrNmcliNotAvailable = errors.New("nmcli is not available on this system")
 )
 
 type WifiMonitor interface {
 	GetNetworkStatus() (*networkStatus, error)
+}
+
+type WifiNetworkManager interface {
+	ListSavedNetworks() ([]string, error)
+	ForgetNetwork(name string) error
 }
 
 type networkStatus struct {

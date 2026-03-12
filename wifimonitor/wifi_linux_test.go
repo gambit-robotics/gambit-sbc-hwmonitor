@@ -1,12 +1,16 @@
 package wifimonitor
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.viam.com/rdk/logging"
 )
 
 func TestLinuxProcWifiMonitor(t *testing.T) {
@@ -134,6 +138,35 @@ Survey data from wlan0
 	assert.Equal(t, -92, status2.Noise)
 }
 
+func TestParseConnectionList(t *testing.T) {
+	output, err := os.ReadFile("testdata/nmcli_connections.txt")
+	require.NoError(t, err)
+
+	m := &nmcliNetworkManager{}
+	networks := m.parseConnectionList(string(output))
+
+	assert.Equal(t, []string{"HomeWiFi", "OfficeWiFi", "MobileHotspot"}, networks)
+}
+
+func TestParseConnectionListEmpty(t *testing.T) {
+	m := &nmcliNetworkManager{}
+	networks := m.parseConnectionList("")
+	assert.Empty(t, networks)
+}
+
+func TestParseConnectionListNoWifi(t *testing.T) {
+	m := &nmcliNetworkManager{}
+	networks := m.parseConnectionList("Wired connection 1:802-3-ethernet\nlo:loopback")
+	assert.Empty(t, networks)
+}
+
+func TestParseConnectionListColonInName(t *testing.T) {
+	m := &nmcliNetworkManager{}
+	// nmcli -t escapes colons in values as \:
+	networks := m.parseConnectionList(`My\:Network:802-11-wireless`)
+	assert.Equal(t, []string{"My:Network"}, networks)
+}
+
 func TestLinuxNmcliWifiMonitor(t *testing.T) {
 	output, err := os.ReadFile("testdata/nmcli.txt")
 	assert.NoError(t, err)
@@ -162,4 +195,176 @@ func TestLinuxNmcliWifiMonitor(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Mock network manager for DoCommand tests
+type mockNetworkManager struct {
+	networks      []string
+	forgetErr     error
+	forgottenName string
+}
+
+func (m *mockNetworkManager) ListSavedNetworks() ([]string, error) {
+	return m.networks, nil
+}
+
+func (m *mockNetworkManager) ForgetNetwork(name string) error {
+	m.forgottenName = name
+	return m.forgetErr
+}
+
+// Mock wifi monitor for active network protection tests
+type mockWifiMonitor struct {
+	status *networkStatus
+	err    error
+}
+
+func (m *mockWifiMonitor) GetNetworkStatus() (*networkStatus, error) {
+	return m.status, m.err
+}
+
+func newTestConfig(t *testing.T, nm WifiNetworkManager) *Config {
+	return &Config{
+		mu:             sync.Mutex{},
+		logger:         logging.NewTestLogger(t),
+		networkManager: nm,
+	}
+}
+
+func TestDoCommandListNetworks(t *testing.T) {
+	mock := &mockNetworkManager{networks: []string{"HomeWiFi", "OfficeWiFi"}}
+	c := newTestConfig(t, mock)
+
+	result, err := c.DoCommand(context.Background(), map[string]interface{}{"command": "list_saved_networks"})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"HomeWiFi", "OfficeWiFi"}, result["networks"])
+}
+
+func TestDoCommandForgetNetwork(t *testing.T) {
+	mock := &mockNetworkManager{networks: []string{"HomeWiFi", "OfficeWiFi"}}
+	c := newTestConfig(t, mock)
+
+	result, err := c.DoCommand(context.Background(), map[string]interface{}{
+		"command": "forget_network",
+		"name":    "OfficeWiFi",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "ok", result["status"])
+	assert.Equal(t, "OfficeWiFi", result["name"])
+	assert.Equal(t, "OfficeWiFi", mock.forgottenName)
+}
+
+func TestDoCommandForgetNetworkError(t *testing.T) {
+	mock := &mockNetworkManager{forgetErr: errors.New("connection 'BadNet' not found")}
+	c := newTestConfig(t, mock)
+
+	_, err := c.DoCommand(context.Background(), map[string]interface{}{
+		"command": "forget_network",
+		"name":    "BadNet",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "BadNet")
+}
+
+func TestDoCommandUnknownCommand(t *testing.T) {
+	c := newTestConfig(t, &mockNetworkManager{})
+
+	_, err := c.DoCommand(context.Background(), map[string]interface{}{"command": "invalid"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown command")
+}
+
+func TestDoCommandMissingCommand(t *testing.T) {
+	c := newTestConfig(t, &mockNetworkManager{})
+
+	_, err := c.DoCommand(context.Background(), map[string]interface{}{})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "missing or invalid 'command' field")
+}
+
+func TestDoCommandNoNetworkManager(t *testing.T) {
+	c := newTestConfig(t, nil)
+
+	_, err := c.DoCommand(context.Background(), map[string]interface{}{"command": "list_saved_networks"})
+	assert.ErrorIs(t, err, ErrNmcliNotAvailable)
+
+	_, err = c.DoCommand(context.Background(), map[string]interface{}{
+		"command": "forget_network",
+		"name":    "SomeNet",
+	})
+	assert.ErrorIs(t, err, ErrNmcliNotAvailable)
+}
+
+func TestDoCommandForgetMissingName(t *testing.T) {
+	c := newTestConfig(t, &mockNetworkManager{})
+
+	_, err := c.DoCommand(context.Background(), map[string]interface{}{"command": "forget_network"})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "missing or invalid 'name' parameter")
+}
+
+func TestDoCommandForgetEmptyName(t *testing.T) {
+	c := newTestConfig(t, &mockNetworkManager{})
+
+	_, err := c.DoCommand(context.Background(), map[string]interface{}{
+		"command": "forget_network",
+		"name":    "",
+	})
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "network name cannot be empty")
+}
+
+func TestDoCommandForgetActiveNetworkReturnsWarning(t *testing.T) {
+	mock := &mockNetworkManager{}
+	c := newTestConfig(t, mock)
+	c.wifiMonitor = &mockWifiMonitor{status: &networkStatus{NetworkName: "HomeWiFi"}}
+
+	result, err := c.DoCommand(context.Background(), map[string]interface{}{
+		"command": "forget_network",
+		"name":    "HomeWiFi",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "ok", result["status"])
+	assert.Equal(t, "HomeWiFi", mock.forgottenName)
+	assert.Contains(t, result["warning"], "active network")
+}
+
+func TestDoCommandForgetInactiveNetworkNoWarning(t *testing.T) {
+	mock := &mockNetworkManager{}
+	c := newTestConfig(t, mock)
+	c.wifiMonitor = &mockWifiMonitor{status: &networkStatus{NetworkName: "HomeWiFi"}}
+
+	result, err := c.DoCommand(context.Background(), map[string]interface{}{
+		"command": "forget_network",
+		"name":    "OfficeWiFi",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "ok", result["status"])
+	_, hasWarning := result["warning"]
+	assert.False(t, hasWarning)
+}
+
+func TestReadingsIncludesSavedNetworks(t *testing.T) {
+	mock := &mockNetworkManager{networks: []string{"HomeWiFi", "OfficeWiFi"}}
+	c := newTestConfig(t, mock)
+	c.wifiMonitor = &mockWifiMonitor{status: &networkStatus{
+		NetworkName:   "HomeWiFi",
+		SignalStrength: -44,
+	}}
+
+	readings, err := c.Readings(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "HomeWiFi", readings["network"])
+	assert.Equal(t, []string{"HomeWiFi", "OfficeWiFi"}, readings["saved_networks"])
+}
+
+func TestReadingsOmitsSavedNetworksWhenNoManager(t *testing.T) {
+	c := newTestConfig(t, nil)
+	c.wifiMonitor = &mockWifiMonitor{status: &networkStatus{NetworkName: "HomeWiFi"}}
+
+	readings, err := c.Readings(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Equal(t, "HomeWiFi", readings["network"])
+	_, hasSaved := readings["saved_networks"]
+	assert.False(t, hasSaved)
 }

@@ -2,6 +2,7 @@ package wifimonitor
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"strconv"
@@ -309,4 +310,49 @@ func (w *procWifiMonitor) parseNetworkStatus(out string) (*networkStatus, error)
 		}
 	}
 	return nil, ErrAdapterNotFound
+}
+
+type nmcliNetworkManager struct {
+	logger logging.Logger
+}
+
+func newNetworkManager(logger logging.Logger) WifiNetworkManager {
+	if _, err := exec.LookPath("nmcli"); err != nil {
+		return nil
+	}
+	return &nmcliNetworkManager{logger: logger}
+}
+
+func (m *nmcliNetworkManager) ListSavedNetworks() ([]string, error) {
+	cmd := exec.Command("nmcli", "-t", "-f", "NAME,TYPE", "connection", "show")
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list connections: %w", err)
+	}
+	return m.parseConnectionList(string(out)), nil
+}
+
+func (m *nmcliNetworkManager) parseConnectionList(out string) []string {
+	var networks []string
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	for _, line := range lines {
+		if line == "" {
+			continue
+		}
+		if name, ok := strings.CutSuffix(line, ":802-11-wireless"); ok && name != "" {
+			// nmcli -t mode escapes colons as \: in field values
+			name = strings.ReplaceAll(name, "\\:", ":")
+			networks = append(networks, name)
+		}
+	}
+	return networks
+}
+
+func (m *nmcliNetworkManager) ForgetNetwork(name string) error {
+	cmd := exec.Command("nmcli", "connection", "delete", name)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("failed to delete network %q: %s: %w", name, strings.TrimSpace(string(out)), err)
+	}
+	return nil
 }

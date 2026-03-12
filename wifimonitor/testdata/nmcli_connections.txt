@@ -1,0 +1,6 @@
+HomeWiFi:802-11-wireless
+Wired connection 1:802-3-ethernet
+OfficeWiFi:802-11-wireless
+lo:loopback
+MobileHotspot:802-11-wireless
+VPN:vpn
