@@ -13,7 +13,7 @@ PACKAGE_DIR := package
 PACKAGE_NAME := $(BIN_NAME).tar.gz
 
 # === Dynamic Variables ===
-VERSION := $(shell grep 'Version' $(VERSION_PATH) | sed -E 's/.*Version\s*=\s*"([^"]+)".*/\1/')
+VERSION := $(shell grep 'Version' $(VERSION_PATH) | sed -E 's/.*Version[[:space:]]*=[[:space:]]*"([^"]+)".*/\1/')
 GIT_VERSION := $(shell git describe --tags --abbrev=0 | sed 's/^v//')
 GOPSUTIL_VERSION := $(shell grep 'shirou/gopsutil' go.mod | sed -E 's/.*v([0-9]+\.[0-9]+\.[0-9]+).*/\1/')
 
