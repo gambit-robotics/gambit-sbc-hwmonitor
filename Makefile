@@ -3,10 +3,10 @@ BIN_PATH := bin
 BIN_NAME := gambit-robotics-sbc-hwmonitor
 ENTRY_POINT := module.go
 VERSION_PATH := utils/version.go
-PLATFORM := $(shell go env GOOS)/$(shell go env GOARCH)
-PLATFORM_MONIKER := $(shell go env GOOS)-$(shell go env GOARCH)
 GOOS=linux
 GOARCH=arm64
+PLATFORM := $(GOOS)/$(GOARCH)
+PLATFORM_MONIKER := $(GOOS)-$(GOARCH)
 
 BIN := $(BIN_PATH)/$(BIN_NAME)
 PACKAGE_DIR := package
