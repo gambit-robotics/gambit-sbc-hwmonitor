@@ -59,3 +59,22 @@ This reports the throttling state of various components of the SBC.
 ## voltages
 
 This reports the voltages of various components on the board. The CPU voltages are generally available for all boards. Some boards also include GPU and total system power.
+
+## Releasing a New Version
+
+1. Update the version in `utils/version.go`
+2. Commit the change and push
+3. Tag the commit and push the tag:
+   ```bash
+   git tag v<version>
+   git push && git push --tags
+   ```
+4. Upload to Viam (requires the [Viam CLI](https://docs.viam.com/cli/)):
+   ```bash
+   make upload
+   ```
+
+The `upload` target cross-compiles for `linux/arm64`, packages the binary with `meta.json`, and runs `viam module upload`. It will fail if:
+- The version in `utils/version.go` doesn't match the latest git tag
+- HEAD isn't tagged
+- There are uncommitted changes
