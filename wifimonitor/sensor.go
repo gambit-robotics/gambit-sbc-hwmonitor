@@ -81,6 +81,9 @@ func (c *Config) Reconfigure(ctx context.Context, _ resource.Dependencies, conf 
 	}
 	c.wifiMonitor = mon
 	c.networkManager = newNetworkManager(c.logger)
+	if c.networkManager == nil {
+		c.logger.Warnf("nmcli not available; saved network management disabled")
+	}
 
 	return nil
 }
@@ -124,6 +127,8 @@ func (c *Config) Readings(ctx context.Context, extra map[string]interface{}) (ma
 		} else {
 			ret["saved_networks"] = stringsToInterfaces(networks)
 		}
+	} else {
+		ret["saved_networks_unavailable"] = true
 	}
 
 	return ret, nil

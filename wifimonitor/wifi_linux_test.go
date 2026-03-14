@@ -355,7 +355,7 @@ func TestReadingsIncludesSavedNetworks(t *testing.T) {
 	readings, err := c.Readings(context.Background(), nil)
 	require.NoError(t, err)
 	assert.Equal(t, "HomeWiFi", readings["network"])
-	assert.Equal(t, []string{"HomeWiFi", "OfficeWiFi"}, readings["saved_networks"])
+	assert.Equal(t, []interface{}{"HomeWiFi", "OfficeWiFi"}, readings["saved_networks"])
 }
 
 func TestReadingsOmitsSavedNetworksWhenNoManager(t *testing.T) {
@@ -367,4 +367,5 @@ func TestReadingsOmitsSavedNetworksWhenNoManager(t *testing.T) {
 	assert.Equal(t, "HomeWiFi", readings["network"])
 	_, hasSaved := readings["saved_networks"]
 	assert.False(t, hasSaved)
+	assert.Equal(t, true, readings["saved_networks_unavailable"])
 }
