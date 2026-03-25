@@ -51,6 +51,10 @@
     {
       "api": "rdk:component:sensor",
       "model": "gambit-robotics:hwmonitor:wifi_monitor"
+    },
+    {
+      "api": "rdk:component:sensor",
+      "model": "gambit-robotics:hwmonitor:power_manager"
     }
   ],
   "build": {
