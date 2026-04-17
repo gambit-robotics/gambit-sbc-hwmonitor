@@ -194,6 +194,9 @@ func (c *Config) handleForgetNetwork(cmd map[string]interface{}) (map[string]int
 	if name == "" {
 		return nil, errors.New("network name cannot be empty")
 	}
+	if err := validateProfileName(name); err != nil {
+		return nil, err
+	}
 
 	if err := c.networkManager.ForgetNetwork(name); err != nil {
 		return nil, err
