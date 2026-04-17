@@ -16,6 +16,12 @@ func (c *Config) newWifiMonitor(adapter string) WifiMonitor {
 	return &wifiMonitor{adapter: adapter, logger: c.logger}
 }
 
+// newNetworkProfileManager is not implemented on Windows; profile management
+// is Linux-only for this module.
+func (c *Config) newNetworkProfileManager() networkProfileManager {
+	return nil
+}
+
 type wifiMonitor struct {
 	adapter string
 	logger  logging.Logger

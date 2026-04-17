@@ -29,6 +29,17 @@ func (c *Config) newWifiMonitor(adapter string) WifiMonitor {
 	return nil
 }
 
+// newNetworkProfileManager returns an nmcli-backed profile manager if nmcli
+// is available, or nil otherwise. Independent of stats source — the stats
+// monitor may use iw while profile management still goes through nmcli.
+func (c *Config) newNetworkProfileManager() networkProfileManager {
+	if _, err := exec.LookPath("nmcli"); err != nil {
+		c.logger.Warnf("nmcli not found on PATH: %v", err)
+		return nil
+	}
+	return &nmcliNetworkProfileManager{logger: c.logger}
+}
+
 type nmcliWifiMonitor struct {
 	logger  logging.Logger
 	adapter string

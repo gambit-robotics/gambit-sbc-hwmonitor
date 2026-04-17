@@ -3,6 +3,7 @@ package wifimonitor
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	"go.viam.com/rdk/components/sensor"
@@ -22,11 +23,12 @@ var (
 
 type Config struct {
 	resource.Named
-	mu          sync.Mutex
-	logger      logging.Logger
-	cancelCtx   context.Context
-	cancelFunc  func()
-	wifiMonitor WifiMonitor
+	mu             sync.Mutex
+	logger         logging.Logger
+	cancelCtx      context.Context
+	cancelFunc     func()
+	wifiMonitor    WifiMonitor
+	profileManager networkProfileManager
 }
 
 func init() {
@@ -74,6 +76,11 @@ func (c *Config) Reconfigure(ctx context.Context, _ resource.Dependencies, conf 
 	}
 	c.wifiMonitor = mon
 
+	c.profileManager = c.newNetworkProfileManager()
+	if c.profileManager == nil {
+		c.logger.Warn("no nmcli found on PATH; list_saved_networks / forget_network will be unavailable")
+	}
+
 	return nil
 }
 
@@ -120,4 +127,69 @@ func (c *Config) Close(ctx context.Context) error {
 
 func (c *Config) Ready(ctx context.Context, extra map[string]interface{}) (bool, error) {
 	return false, nil
+}
+
+// DoCommand handles wifi profile management commands.
+//
+// Supported commands:
+//
+//	{"command": "list_saved_networks"}
+//	    -> {"networks": ["ssid1", "ssid2", ...]}
+//
+//	{"command": "forget_network", "name": "ssid1"}
+//	    -> {"forgotten": true, "name": "ssid1"}
+//
+// Errors are always returned to the caller AND logged — no silent swallowing.
+func (c *Config) DoCommand(ctx context.Context, cmd map[string]interface{}) (map[string]interface{}, error) {
+	cmdName, _ := cmd["command"].(string)
+	c.logger.Infof("DoCommand received: command=%q", cmdName)
+
+	// Snapshot the manager under the mutex — matches Readings/Reconfigure
+	// locking so a concurrent Reconfigure can't swap profileManager mid-call.
+	// Don't hold mu across the nmcli exec; profile-management commands can
+	// take seconds and we don't want to block Readings() that whole time.
+	c.mu.Lock()
+	mgr := c.profileManager
+	c.mu.Unlock()
+
+	res, err := dispatchCommand(mgr, cmdName, cmd)
+	if err != nil {
+		c.logger.Warnf("DoCommand %q failed: %v", cmdName, err)
+		return nil, err
+	}
+	c.logger.Infof("DoCommand %q succeeded", cmdName)
+	return res, nil
+}
+
+func dispatchCommand(mgr networkProfileManager, cmdName string, cmd map[string]interface{}) (map[string]interface{}, error) {
+	switch cmdName {
+	case "":
+		return nil, errors.New("missing 'command' field")
+	case "list_saved_networks":
+		if mgr == nil {
+			return nil, errors.New("list_saved_networks unavailable: nmcli not found on PATH")
+		}
+		names, err := mgr.ListSavedNetworks()
+		if err != nil {
+			return nil, fmt.Errorf("list_saved_networks: %w", err)
+		}
+		return map[string]interface{}{"networks": names}, nil
+	case "forget_network":
+		if mgr == nil {
+			return nil, errors.New("forget_network unavailable: nmcli not found on PATH")
+		}
+		name, _ := cmd["name"].(string)
+		if name == "" {
+			return nil, errors.New("forget_network requires 'name'")
+		}
+		if err := validateProfileName(name); err != nil {
+			return nil, fmt.Errorf("forget_network: %w", err)
+		}
+		if err := mgr.ForgetNetwork(name); err != nil {
+			return nil, fmt.Errorf("forget_network %q: %w", name, err)
+		}
+		return map[string]interface{}{"forgotten": true, "name": name}, nil
+	default:
+		return nil, fmt.Errorf("unknown command %q", cmdName)
+	}
 }
