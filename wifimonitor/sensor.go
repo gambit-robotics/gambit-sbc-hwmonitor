@@ -161,6 +161,7 @@ func (c *Config) DoCommand(ctx context.Context, cmd map[string]interface{}) (map
 	if !ok {
 		return nil, errors.New("missing or invalid 'command' field")
 	}
+	c.logger.Infof("DoCommand received: command=%q", command)
 
 	switch command {
 	case "list_saved_networks":
@@ -194,10 +195,16 @@ func (c *Config) handleForgetNetwork(cmd map[string]interface{}) (map[string]int
 	if name == "" {
 		return nil, errors.New("network name cannot be empty")
 	}
-
-	if err := c.networkManager.ForgetNetwork(name); err != nil {
+	if err := validateProfileName(name); err != nil {
 		return nil, err
 	}
+
+	c.logger.Infof("forget_network: deleting profile %q", name)
+	if err := c.networkManager.ForgetNetwork(name); err != nil {
+		c.logger.Warnf("forget_network %q failed: %v", name, err)
+		return nil, err
+	}
+	c.logger.Infof("forget_network: deleted profile %q", name)
 	c.invalidateSavedNetworksCache()
 
 	result := map[string]interface{}{"status": "ok", "name": name}
